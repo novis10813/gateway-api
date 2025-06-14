@@ -15,6 +15,7 @@ from auth import (
     Token, 
     TokenData
 )
+from api_key_manager import api_key_db
 
 app = FastAPI(
     title="Gateway Authentication Service",
@@ -47,17 +48,30 @@ class AuthStatus(BaseModel):
 
 
 class ApiKeyRequest(BaseModel):
-    name: Optional[str] = None
-    prefix: Optional[str] = ""
-    length: Optional[int] = 32
-    key_type: Optional[str] = "default"  # default, hex, urlsafe
+    name: str
+    service: str
+    permissions: Optional[List[str]] = ["read"]
+    custom_key: Optional[str] = None
 
 
 class ApiKeyResponse(BaseModel):
     api_key: str
-    name: Optional[str] = None
+    name: str
+    service: str
+    permissions: List[str]
     created_at: str
     message: str
+
+
+class ApiKeyListResponse(BaseModel):
+    total_keys: int
+    keys: dict
+    database_keys: dict
+    legacy_keys: dict
+
+
+class DeactivateKeyRequest(BaseModel):
+    api_key: str
 
 
 def is_internal_request(request: Request) -> bool:
@@ -187,12 +201,16 @@ async def legacy_api(is_valid: bool = Depends(verify_api_key)):
 @app.get("/internal/status", response_model=dict)
 async def internal_status(request: Request, _: None = Depends(require_internal_access)):
     """內部服務狀態"""
+    database_keys = api_key_db.list_api_keys()
     return {
         "service": "Gateway Authentication Service - Internal",
         "status": "running",
         "client_ip": request.client.host,
-        "api_keys_count": len(settings.api_keys_list),
-        "jwt_algorithm": settings.jwt_algorithm
+        "legacy_keys_count": len(settings.api_keys_list),
+        "database_keys_count": len(database_keys),
+        "total_active_keys": len(api_key_db.get_all_valid_keys()),
+        "jwt_algorithm": settings.jwt_algorithm,
+        "api_key_db_file": settings.api_key_db_file
     }
 
 
@@ -202,48 +220,81 @@ async def generate_new_api_key(
     key_request: ApiKeyRequest,
     _: None = Depends(require_internal_access)
 ):
-    """生成新的 API Key - 僅內部使用"""
-    import secrets
-    import string
-    from datetime import datetime
-    
-    # 生成 API key
-    if key_request.key_type == "hex":
-        new_key = secrets.token_hex(key_request.length // 2)
-    elif key_request.key_type == "urlsafe":
-        new_key = secrets.token_urlsafe(key_request.length)[:key_request.length]
-    else:  # default
-        alphabet = string.ascii_letters + string.digits
-        random_part = ''.join(secrets.choice(alphabet) for _ in range(key_request.length))
-        if key_request.prefix:
-            new_key = f"{key_request.prefix}_{random_part}"
-        else:
-            new_key = random_part
-    
-    return ApiKeyResponse(
-        api_key=new_key,
-        name=key_request.name,
-        created_at=datetime.now().isoformat(),
-        message="API Key generated successfully. Please save it securely and add to your configuration."
-    )
+    """生成新的 API Key 並存儲到數據庫 - 僅內部使用"""
+    try:
+        result = api_key_db.add_api_key(
+            name=key_request.name,
+            service=key_request.service,
+            permissions=key_request.permissions,
+            custom_key=key_request.custom_key
+        )
+        
+        return ApiKeyResponse(
+            api_key=result["api_key"],
+            name=result["info"]["name"],
+            service=result["info"]["service"],
+            permissions=result["info"]["permissions"],
+            created_at=result["info"]["created_at"],
+            message="API Key generated and stored successfully. Please save it securely."
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
-@app.get("/internal/list-api-keys", response_model=dict)
+@app.get("/internal/list-api-keys", response_model=ApiKeyListResponse)
 async def list_api_keys(request: Request, _: None = Depends(require_internal_access)):
-    """列出當前配置的 API Keys (隱藏完整內容) - 僅內部使用"""
-    masked_keys = []
-    for key in settings.api_keys_list:
+    """列出所有 API Keys (隱藏完整內容) - 僅內部使用"""
+    # 從數據庫獲取
+    database_keys = api_key_db.list_api_keys()
+    
+    # 處理舊的配置 keys
+    legacy_keys = {}
+    for i, key in enumerate(settings.api_keys_list):
         if len(key) > 8:
             masked = key[:4] + "*" * (len(key) - 8) + key[-4:]
         else:
             masked = "*" * len(key)
-        masked_keys.append(masked)
+        legacy_keys[masked] = {
+            "name": f"Legacy Key {i+1}",
+            "service": "legacy",
+            "permissions": ["admin"],
+            "created_at": "N/A",
+            "source": "config"
+        }
     
-    return {
-        "total_keys": len(settings.api_keys_list),
-        "masked_keys": masked_keys,
-        "note": "Complete keys are not displayed for security reasons"
-    }
+    # 合併所有 keys
+    all_keys = {**database_keys, **legacy_keys}
+    
+    return ApiKeyListResponse(
+        total_keys=len(all_keys),
+        keys=all_keys,
+        database_keys=database_keys,
+        legacy_keys=legacy_keys
+    )
+
+
+@app.post("/internal/deactivate-api-key", response_model=dict)
+async def deactivate_api_key(
+    request: Request,
+    deactivate_request: DeactivateKeyRequest,
+    _: None = Depends(require_internal_access)
+):
+    """停用 API Key - 僅內部使用"""
+    success = api_key_db.deactivate_api_key(deactivate_request.api_key)
+    if success:
+        return {
+            "message": "API Key deactivated successfully",
+            "api_key": deactivate_request.api_key[:8] + "...",
+            "status": "deactivated"
+        }
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API Key not found in database"
+        )
 
 
 @app.get("/internal/config", response_model=dict)
@@ -252,7 +303,10 @@ async def get_internal_config(request: Request, _: None = Depends(require_intern
     return {
         "jwt_algorithm": settings.jwt_algorithm,
         "jwt_expire_minutes": settings.jwt_access_token_expire_minutes,
-        "api_keys_count": len(settings.api_keys_list),
+        "legacy_keys_count": len(settings.api_keys_list),
+        "database_keys_count": len(api_key_db.list_api_keys()),
+        "use_legacy_keys": settings.use_legacy_api_keys,
+        "api_key_db_file": settings.api_key_db_file,
         "allowed_origins": settings.allowed_origins_list,
         "debug_mode": settings.debug
     }

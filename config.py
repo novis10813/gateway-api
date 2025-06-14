@@ -9,8 +9,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     
-    # API Key 配置
-    api_keys: str = "your-secret"
+    # API Key 配置 (向後兼容)
+    api_keys: str = "your-secret,another-key"
+    
+    # API Key 數據庫配置
+    api_key_db_file: str = "api_keys.json"
+    use_legacy_api_keys: bool = True  # 是否同時支援舊的配置方式
     
     # 服務配置
     debug: bool = False
@@ -22,7 +26,7 @@ class Settings(BaseSettings):
     
     @property
     def api_keys_list(self) -> List[str]:
-        """將 API keys 字符串轉換為列表"""
+        """將 API keys 字符串轉換為列表（向後兼容）"""
         return [key.strip() for key in self.api_keys.split(",") if key.strip()]
     
     @property
