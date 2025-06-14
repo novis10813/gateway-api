@@ -10,5 +10,4 @@ wheels/
 .venv
 .env
 
-# Backup files
-.backup_old_files/
+api_keys.json

@@ -1,0 +1,63 @@
+services:
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - gateway
+    networks:
+      - gateway_default
+      - gateway_internal
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/logs:/var/log/letsencrypt
+    depends_on:
+      - nginx
+    networks:
+      - gateway_default
+    entrypoint: "/bin/sh"
+    command: >
+      -c "trap exit TERM; 
+      while :; do 
+        certbot renew --quiet || echo 'Renewal failed, will retry in 12h'; 
+        sleep 12h & wait $$!; 
+      done"
+    restart: unless-stopped
+
+  gateway:
+    image: ghcr.io/astral-sh/uv:python3.9-alpine
+    container_name: gateway
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    ports:
+      - "127.0.0.1:8000:8000"
+    command: >
+      sh -c "uv sync && uv run --directory app uvicorn main:app --host 0.0.0.0 --port 8000"
+    networks:
+      - gateway_internal
+    restart: unless-stopped
+
+volumes:
+  certbot_conf:
+  certbot_www:
+
+networks:
+  gateway_default:
+    driver: bridge
+
+  gateway_internal:
+    driver: bridge
+    external: true
