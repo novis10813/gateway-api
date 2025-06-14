@@ -1,3 +1,8 @@
+"""
+Core configuration settings for gateway authentication service.
+
+Contains all application settings using Pydantic BaseSettings.
+"""
 import os
 from typing import List
 from pydantic_settings import BaseSettings

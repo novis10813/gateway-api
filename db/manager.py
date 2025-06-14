@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-API Key 管理模組
-使用 JSON 文件作為簡單的數據庫
+Database manager for gateway authentication service.
+
+API Key 管理模組，使用 JSON 文件作為簡單的數據庫
 """
 import json
 import secrets

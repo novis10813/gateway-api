@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from api_key_manager import ApiKeyDB
+from ..db.manager import ApiKeyDB
 
 
 def main():
