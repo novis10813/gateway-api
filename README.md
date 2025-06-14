@@ -253,47 +253,47 @@ curl -H "Authorization: Bearer <your-jwt-token>" https://novis.tplinkdns.com/aut
 ### 方法 1: 命令行工具 (推薦)
 ```bash
 # 列出所有 API Keys
-docker compose exec app python api_key_cli.py list
+docker compose exec gateway python -m app.cli.api_key_cli list
 
 # 列出特定服務的 Keys
-docker compose exec app python api_key_cli.py list --service webdav
+docker compose exec gateway python -m app.cli.api_key_cli list --service webdav
 
 # 創建新的 API Key
-docker compose exec app python api_key_cli.py add \
+docker compose exec gateway python -m app.cli.api_key_cli add \
   --name "WebDAV Service" \
   --service "webdav" \
   --permissions read write
 
 # 創建管理員權限的 Key
-docker compose exec app python api_key_cli.py add \
+docker compose exec gateway python -m app.cli.api_key_cli add \
   --name "Admin Key" \
   --service "admin" \
   --permissions admin
 
 # 使用自定義 Key
-docker compose exec app python api_key_cli.py add \
+docker compose exec gateway python -m app.cli.api_key_cli add \
   --name "Custom Key" \
   --service "custom" \
   --custom-key "my-custom-key-123"
 
 # 驗證 API Key
-docker compose exec app python api_key_cli.py verify \
+docker compose exec gateway python -m app.cli.api_key_cli verify \
   --key "your-api-key-here"
 
 # 驗證特定權限
-docker compose exec app python api_key_cli.py verify \
+docker compose exec gateway python -m app.cli.api_key_cli verify \
   --key "your-api-key-here" \
   --permission "write"
 
 # 停用 API Key
-docker compose exec app python api_key_cli.py deactivate \
+docker compose exec gateway python -m app.cli.api_key_cli deactivate \
   --key "your-api-key-here"
 
 # 查看統計信息
-docker compose exec app python api_key_cli.py stats
+docker compose exec gateway python -m app.cli.api_key_cli stats
 
 # 顯示包括停用的 Keys
-docker compose exec app python api_key_cli.py list --show-all
+docker compose exec gateway python -m app.cli.api_key_cli list --show-all
 ```
 
 ### 方法 2: HTTP API (內部訪問)
@@ -327,7 +327,7 @@ curl -s http://localhost:8000/internal/config
 ### 方法 3: 容器內直接操作
 ```bash
 # 進入容器
-docker compose exec app sh
+docker compose exec gateway sh
 
 # 使用 Python 直接操作
 python -c "
@@ -361,10 +361,10 @@ curl -H "X-API-Key: your-key" \
 查看統計：
 ```bash
 # 查看詳細統計
-docker compose exec app python api_key_cli.py stats
+docker compose exec gateway python -m app.cli.api_key_cli stats
 
 # 查看特定服務的使用情況
-docker compose exec app python api_key_cli.py list --service immich
+docker compose exec gateway python -m app.cli.api_key_cli list --service immich
 ```
 
 ## 🔄 遷移指南
@@ -378,19 +378,19 @@ docker compose exec app python api_key_cli.py list --service immich
 ### 建議的服務 Keys
 ```bash
 # WebDAV 服務
-docker compose exec app python api_key_cli.py add \
+docker compose exec gateway python -m app.cli.api_key_cli add \
   --name "WebDAV File Access" --service "webdav" --permissions read write
 
 # Immich 照片服務  
-docker compose exec app python api_key_cli.py add \
+docker compose exec gateway python -m app.cli.api_key_cli add \
   --name "Immich Photo Service" --service "immich" --permissions read write admin
 
 # N8N 自動化
-docker compose exec app python api_key_cli.py add \
+docker compose exec gateway python -m app.cli.api_key_cli add \
   --name "N8N Automation" --service "n8n" --permissions read
 
 # Portainer 管理
-docker compose exec app python api_key_cli.py add \
+docker compose exec gateway python -m app.cli.api_key_cli add \
   --name "Portainer Management" --service "portainer" --permissions admin
 ```
 
@@ -416,13 +416,13 @@ docker compose exec app python api_key_cli.py add \
 **Q: API Key 驗證失敗**
 ```bash
 # 檢查 Key 是否存在且活躍
-docker compose exec app python api_key_cli.py verify --key "your-key"
+docker compose exec gateway python -m app.cli.api_key_cli verify --key "your-key"
 ```
 
 **Q: 權限不足錯誤**
 ```bash
 # 檢查 Key 的權限
-docker compose exec app python api_key_cli.py list --service your-service
+docker compose exec gateway python -m app.cli.api_key_cli list --service your-service
 ```
 
 **Q: 內部端點無法訪問**
@@ -435,8 +435,8 @@ docker compose ps
 ### 日誌查看
 ```bash
 # 查看服務日誌
-docker compose logs app --tail=50
+docker compose logs gateway --tail=50
 
 # 實時監控日誌
-docker compose logs app -f
+docker compose logs gateway -f
 ```
