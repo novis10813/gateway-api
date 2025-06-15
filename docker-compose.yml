@@ -23,6 +23,7 @@ services:
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
       - ./certbot/logs:/var/log/letsencrypt
+      - nginx-logs:/var/log/nginx
     depends_on:
       - nginx
     networks:
@@ -50,9 +51,30 @@ services:
       - gateway_internal
     restart: unless-stopped
 
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: fail2ban
+    network_mode: "host"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./fail2ban:/etc/fail2ban
+      - nginx-logs:/var/log/nginx:ro  # 讀取 nginx 日誌
+      - fail2ban-data:/data
+    environment:
+      - TZ=Asia/Taipei
+      - F2B_LOG_LEVEL=INFO
+      - F2B_DB_PURGE_AGE=1d
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
 volumes:
   certbot_conf:
   certbot_www:
+  nginx-logs:
+  fail2ban-data:
 
 networks:
   gateway_default:
