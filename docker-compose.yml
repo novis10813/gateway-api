@@ -9,6 +9,7 @@ services:
       - ./nginx/conf:/etc/nginx/conf.d
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
+      - nginx-logs:/var/log/nginx
     depends_on:
       - gateway
     networks:
@@ -59,13 +60,15 @@ services:
       - NET_ADMIN
       - NET_RAW
     volumes:
-      - ./fail2ban:/etc/fail2ban
-      - nginx-logs:/var/log/nginx:ro  # 讀取 nginx 日誌
+      - ./fail2ban/jail.d:/data/jail.d:ro
+      - ./fail2ban/data/filter.d:/data/filter.d:ro
+      - nginx-logs:/var/log/nginx:ro
       - fail2ban-data:/data
     environment:
       - TZ=Asia/Taipei
       - F2B_LOG_LEVEL=INFO
       - F2B_DB_PURGE_AGE=1d
+      - F2B_IPTABLES_CHAIN=INPUT
     depends_on:
       - nginx
     restart: unless-stopped
