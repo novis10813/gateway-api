@@ -12,3 +12,15 @@ wheels/
 
 api_keys.json
 certbot/
+
+# Fail2ban runtime data
+fail2ban/data/
+fail2ban/*.sqlite*
+fail2ban/*.log
+fail2ban/*.pid
+fail2ban/*.sock
+fail2ban/run/
+fail2ban/var/
+
+# Nginx logs (if storing locally)
+nginx/logs/
