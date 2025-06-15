@@ -21,6 +21,7 @@ fail2ban/*.pid
 fail2ban/*.sock
 fail2ban/run/
 fail2ban/var/
+jail.d
 
 # Nginx logs (if storing locally)
 nginx/logs/
