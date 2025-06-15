@@ -3,8 +3,9 @@ Authentication endpoints for gateway authentication service.
 
 Contains all authentication-related API endpoints.
 """
+import logging
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import Dict
 
 from core.config import settings
@@ -15,6 +16,9 @@ from api.deps import (
     require_api_key_or_jwt
 )
 from services.auth_service import auth_service
+
+# 設置 logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -67,8 +71,29 @@ async def verify_authentication(auth_info: dict = Depends(require_api_key_or_jwt
 
 
 @router.get("/verify-api-key", response_model=AuthStatus)
-async def verify_api_key_only(is_valid: bool = Depends(verify_api_key)):
-    """僅驗證 API Key"""
+async def verify_api_key_only(
+    request: Request,
+    is_valid: bool = Depends(verify_api_key)
+):
+    """僅驗證 API Key - 帶詳細日誌"""
+    
+    # 獲取請求信息
+    api_key = request.headers.get("X-API-Key", "")
+    original_uri = request.headers.get("X-Original-URI", "")
+    client_ip = request.client.host
+    user_agent = request.headers.get("User-Agent", "")
+    
+    # 記錄請求詳情
+    logger.info(f"API Key 驗證請求: "
+                f"IP={client_ip}, "
+                f"URI={original_uri}, "
+                f"API_Key={'存在' if api_key else '缺失'}, "
+                f"Key_prefix={api_key[:10]}... 如果存在")
+    
+    # 如果有 User-Agent，記錄客戶端類型
+    if "obsidian" in user_agent.lower():
+        logger.info(f"Obsidian 客戶端請求: {user_agent}")
+    
     return AuthStatus(
         authenticated=True,
         auth_type="api_key", 

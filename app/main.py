@@ -5,9 +5,17 @@ This is the refactored main.py with clean separation of concerns.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+import sys
 
 from core.config import settings
 from api.v1.router import api_router
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
 
 # 創建 FastAPI 應用程式
 app = FastAPI(

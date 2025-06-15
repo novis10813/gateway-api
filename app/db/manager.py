@@ -45,6 +45,11 @@ class ApiKeyDB:
             with open(self.db_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
     
+    def _save_data_unlocked(self, data: Dict):
+        """保存數據（不加鎖）"""
+        with open(self.db_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    
     def add_api_key(self, name: str, service: str, permissions: List[str] = None, 
                    custom_key: str = None) -> Dict:
         """添加新的 API Key"""
@@ -124,33 +129,34 @@ class ApiKeyDB:
     
     def validate_api_key(self, api_key: str, required_permission: str = None) -> Dict:
         """驗證 API Key 並更新使用記錄"""
-        data = self._load_data()
-        key_info = data["api_keys"].get(api_key)
-        
-        if not key_info:
-            return {"valid": False, "reason": "Key not found"}
-        
-        if not key_info.get("is_active", True):
-            return {"valid": False, "reason": "Key deactivated"}
-        
-        # 檢查權限
-        if required_permission:
-            permissions = key_info.get("permissions", [])
-            if required_permission not in permissions and "admin" not in permissions:
-                return {"valid": False, "reason": "Insufficient permissions"}
-        
-        # 更新使用記錄
-        key_info["last_used"] = datetime.now().isoformat()
-        key_info["usage_count"] = key_info.get("usage_count", 0) + 1
-        data["api_keys"][api_key] = key_info
-        self._save_data(data)
-        
-        return {
-            "valid": True,
-            "service": key_info["service"],
-            "permissions": key_info["permissions"],
-            "name": key_info["name"]
-        }
+        with self._lock:  # 🔧 整個操作加鎖
+            data = self._load_data()
+            key_info = data["api_keys"].get(api_key)
+            
+            if not key_info:
+                return {"valid": False, "reason": "Key not found"}
+            
+            if not key_info.get("is_active", True):
+                return {"valid": False, "reason": "Key deactivated"}
+            
+            # 檢查權限
+            if required_permission:
+                permissions = key_info.get("permissions", [])
+                if required_permission not in permissions and "admin" not in permissions:
+                    return {"valid": False, "reason": "Insufficient permissions"}
+            
+            # 更新使用記錄
+            key_info["last_used"] = datetime.now().isoformat()
+            key_info["usage_count"] = key_info.get("usage_count", 0) + 1
+            data["api_keys"][api_key] = key_info
+            self._save_data_unlocked(data)  # 🔧 使用不加鎖的版本
+            
+            return {
+                "valid": True,
+                "service": key_info["service"],
+                "permissions": key_info["permissions"],
+                "name": key_info["name"]
+            }
     
     def get_all_valid_keys(self) -> List[str]:
         """獲取所有有效的 API Keys（用於向後兼容）"""

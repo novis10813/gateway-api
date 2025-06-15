@@ -7,9 +7,12 @@ from fastapi import Depends, HTTPException, status, Request, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Dict, Optional
 import ipaddress
+import logging
 
 from services.auth_service import auth_service
 from models.auth import TokenData
+
+logger = logging.getLogger(__name__)
 
 # FastAPI Security schemes
 security = HTTPBearer()
@@ -47,8 +50,20 @@ def require_internal_access(request: Request):
 def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key"), 
                    required_permission: str = None) -> bool:
     """驗證 API Key 依賴注入函數"""
-    auth_service.verify_api_key(x_api_key, required_permission)
-    return True
+    logger.info(f"deps.verify_api_key 調用")
+    logger.info(f"x_api_key 存在: {'是' if x_api_key else '否'}")
+    if x_api_key:
+        logger.info(f"x_api_key 前 10 個字符: {x_api_key[:10]}")
+    else:
+        logger.info("x_api_key 不存在")
+
+    try:
+        result = auth_service.verify_api_key(x_api_key, required_permission)
+        logger.info(f"verify_api_key 返回結果: {result}")
+        return True
+    except Exception as e:
+        logger.error(f"auth_service.verify_api_key 調用失敗: {e}")
+        raise
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> TokenData:

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     
     # API Key 數據庫配置
     api_key_db_file: str = "api_keys.json"
-    use_legacy_api_keys: bool = True  # 是否同時支援舊的配置方式
+    use_legacy_api_keys: bool = False  # 是否同時支援舊的配置方式
     
     # 服務配置
     debug: bool = False
