@@ -25,13 +25,14 @@ class AuthService:
         except Exception as e:
             print(f"⚠️  Failed to migrate legacy keys: {e}")
     
-    def verify_api_key(self, api_key: str, required_permission: str = None) -> Dict:
+    def verify_api_key(self, api_key: str, required_permission: str = None, service_name: str = None) -> Dict:
         """
-        驗證 API Key，支援新舊兩種方式
+        驗證 API Key，支援新舊兩種方式和服務綁定驗證
         
         Args:
             api_key: API 金鑰
             required_permission: 需要的權限（可選）
+            service_name: 請求的服務名稱（可選，用於服務綁定驗證）
         
         Returns:
             dict: API Key 信息和權限
@@ -46,16 +47,35 @@ class AuthService:
         # 首先檢查新的數據庫
         result = api_key_db.validate_api_key(api_key, required_permission)
         if result["valid"]:
+            # 如果指定了服務名稱，進行服務綁定驗證
+            if service_name:
+                key_service = result["service"]
+                
+                # legacy keys 可以存取所有服務
+                if key_service == "legacy":
+                    return result
+                
+                # 檢查服務是否匹配
+                if key_service != service_name:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"API Key for service '{key_service}' cannot access service '{service_name}'",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+            
             return result
         
         # 如果啟用了向後兼容，檢查舊的配置
         if settings.use_legacy_api_keys and api_key in settings.api_keys_list:
-            return {
+            legacy_result = {
                 "valid": True,
                 "service": "legacy",
                 "permissions": ["admin"],  # 舊的 keys 默認擁有所有權限
                 "name": "Legacy API Key"
             }
+            
+            # legacy keys 可以存取所有服務，無需額外檢查
+            return legacy_result
         
         # 都不匹配則拋出錯誤
         raise HTTPException(
@@ -98,24 +118,26 @@ class AuthService:
         self, 
         api_key: Optional[str] = None, 
         jwt_token: Optional[str] = None,
-        required_permission: str = None
+        required_permission: str = None,
+        service_name: str = None
     ) -> Dict:
         """
-        驗證請求，支援 API Key 或 JWT token
+        驗證請求，支援 API Key 或 JWT token，以及服務綁定驗證
         
         Args:
             api_key: API 金鑰（可選）
             jwt_token: JWT token（可選）
             required_permission: 需要的權限（可選）
+            service_name: 請求的服務名稱（可選，用於服務綁定驗證）
         
         Returns:
             dict: 認證信息
         """
         # 優先檢查 API Key
         if api_key:
-            # 使用新的數據庫驗證
-            result = api_key_db.validate_api_key(api_key, required_permission)
-            if result["valid"]:
+            # 使用更新後的 verify_api_key 方法，支援服務綁定驗證
+            try:
+                result = self.verify_api_key(api_key, required_permission, service_name)
                 return {
                     "auth_type": "api_key", 
                     "key": api_key,
@@ -123,16 +145,9 @@ class AuthService:
                     "permissions": result["permissions"],
                     "name": result["name"]
                 }
-            
-            # 向後兼容舊的配置
-            if settings.use_legacy_api_keys and api_key in settings.api_keys_list:
-                return {
-                    "auth_type": "api_key", 
-                    "key": api_key,
-                    "service": "legacy",
-                    "permissions": ["admin"],
-                    "name": "Legacy API Key"
-                }
+            except HTTPException:
+                # 如果 API Key 驗證失敗，繼續檢查 JWT
+                pass
         
         # 如果沒有 API Key 或 API Key 無效，檢查 JWT
         if jwt_token:

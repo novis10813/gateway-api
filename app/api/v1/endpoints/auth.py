@@ -27,8 +27,12 @@ router = APIRouter()
 async def login_with_api_key(login_request: LoginRequest):
     """使用 API Key 登入並取得 JWT token"""
     
-    # 驗證 API Key
-    if login_request.api_key not in settings.api_keys_list:
+    # 使用認證服務驗證 API Key（不進行服務綁定驗證，因為這是登入端點）
+    try:
+        result = auth_service.verify_api_key(login_request.api_key)
+        logger.info(f"登入驗證通過: {result['name']} (service: {result['service']})")
+    except HTTPException as e:
+        logger.warning(f"登入驗證失敗: {e.detail}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API Key"
@@ -52,13 +56,15 @@ async def login_with_api_key(login_request: LoginRequest):
 
 @router.get("/verify", response_model=AuthStatus)
 async def verify_authentication(auth_info: dict = Depends(require_api_key_or_jwt)):
-    """驗證認證狀態 (API Key 或 JWT)"""
+    """驗證認證狀態 (API Key 或 JWT)，支援服務綁定驗證"""
     
     if auth_info["auth_type"] == "api_key":
+        service = auth_info.get("service", "unknown")
+        message = f"Valid API Key for service '{service}'" if service != "unknown" else "Valid API Key"
         return AuthStatus(
             authenticated=True,
             auth_type="api_key",
-            message="Valid API Key",
+            message=message,
         )
     else:  # JWT
         return AuthStatus(
@@ -75,10 +81,11 @@ async def verify_api_key_only(
     request: Request,
     is_valid: bool = Depends(verify_api_key)
 ):
-    """僅驗證 API Key - 帶詳細日誌"""
+    """僅驗證 API Key - 帶詳細日誌和服務綁定驗證"""
     
     # 獲取請求信息
     api_key = request.headers.get("X-API-Key", "")
+    service_name = request.headers.get("X-Service-Name", "")
     original_uri = request.headers.get("X-Original-URI", "")
     client_ip = request.client.host
     user_agent = request.headers.get("User-Agent", "")
@@ -87,6 +94,7 @@ async def verify_api_key_only(
     logger.info(f"API Key 驗證請求: "
                 f"IP={client_ip}, "
                 f"URI={original_uri}, "
+                f"Service={service_name}, "
                 f"API_Key={'存在' if api_key else '缺失'}, "
                 f"Key_prefix={api_key[:10]}... 如果存在")
     
@@ -94,10 +102,16 @@ async def verify_api_key_only(
     if "obsidian" in user_agent.lower():
         logger.info(f"Obsidian 客戶端請求: {user_agent}")
     
+    # 記錄服務綁定驗證結果
+    if service_name:
+        logger.info(f"服務綁定驗證通過: API Key 可存取服務 '{service_name}'")
+    else:
+        logger.info("未指定服務名稱，跳過服務綁定驗證")
+    
     return AuthStatus(
         authenticated=True,
         auth_type="api_key", 
-        message="Valid API Key"
+        message=f"Valid API Key for service '{service_name}'" if service_name else "Valid API Key"
     )
 
 

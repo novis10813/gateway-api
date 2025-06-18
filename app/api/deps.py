@@ -47,18 +47,22 @@ def require_internal_access(request: Request):
         )
 
 
-def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key"), 
-                   required_permission: str = None) -> bool:
-    """驗證 API Key 依賴注入函數"""
+def verify_api_key(
+    x_api_key: str = Header(None, alias="X-API-Key"), 
+    x_service_name: Optional[str] = Header(None, alias="X-Service-Name"),
+    required_permission: str = None
+) -> bool:
+    """驗證 API Key 依賴注入函數，支援服務綁定驗證"""
     logger.info(f"deps.verify_api_key 調用")
     logger.info(f"x_api_key 存在: {'是' if x_api_key else '否'}")
+    logger.info(f"x_service_name: {x_service_name}")
     if x_api_key:
         logger.info(f"x_api_key 前 10 個字符: {x_api_key[:10]}")
     else:
         logger.info("x_api_key 不存在")
 
     try:
-        result = auth_service.verify_api_key(x_api_key, required_permission)
+        result = auth_service.verify_api_key(x_api_key, required_permission, x_service_name)
         logger.info(f"verify_api_key 返回結果: {result}")
         return True
     except Exception as e:
@@ -73,12 +77,13 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
 
 def require_api_key_or_jwt(
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    x_service_name: Optional[str] = Header(None, alias="X-Service-Name"),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
     required_permission: str = None
 ) -> Dict:
-    """要求 API Key 或 JWT token 其中之一的依賴注入函數"""
+    """要求 API Key 或 JWT token 其中之一的依賴注入函數，支援服務綁定驗證"""
     jwt_token = credentials.credentials if credentials else None
-    return auth_service.authenticate_request(x_api_key, jwt_token, required_permission)
+    return auth_service.authenticate_request(x_api_key, jwt_token, required_permission, x_service_name)
 
 
 # 重新導出認證依賴，便於其他模組使用

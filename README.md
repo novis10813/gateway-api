@@ -440,3 +440,109 @@ docker compose logs gateway --tail=50
 # 實時監控日誌
 docker compose logs gateway -f
 ```
+
+---
+
+## 🔐 API Key 與服務綁定功能
+
+### 📋 功能概述
+
+為了提升安全性，系統現在支援 **API Key 與服務綁定**，確保每個 API Key 只能存取指定的服務。
+
+**功能特色：**
+- 🔒 **服務隔離**: webdav 的 API Key 只能用於 webdav，無法存取 blog 或其他服務
+- 🛡️ **細粒度控制**: 每個服務擁有獨立的存取權限
+- 🔄 **向後兼容**: legacy API Keys 仍可存取所有服務
+- ⚡ **即時驗證**: nginx 和 FastAPI 聯動進行服務驗證
+
+### 🎯 工作原理
+
+1. **nginx 層**: 根據請求路徑自動添加 `X-Service-Name` header
+   - `/webdav/*` → `X-Service-Name: webdav`
+   - `/blog/*` → `X-Service-Name: blog`
+   - `/auth/*` → `X-Service-Name: auth`
+   - `/api/*` → `X-Service-Name: api`
+
+2. **FastAPI 層**: 驗證 API Key 的 service 欄位與 header 是否一致
+   - 如果一致：允許存取
+   - 如果不一致：回傳 403 Forbidden
+   - legacy keys：允許存取所有服務
+
+### 📁 實施計畫
+
+#### **第一步：修改依賴注入層** (`api/deps.py`)
+- [x] nginx 設定已完成：各服務 location 已加上 `X-Service-Name` header
+- [x] 修改 `verify_api_key` 函數，增加讀取 `X-Service-Name` header
+- [x] 將服務名稱參數傳遞給認證服務進行驗證
+
+#### **第二步：修改業務邏輯層** (`services/auth_service.py`)  
+- [x] 在 `verify_api_key` 方法中增加 `service_name` 參數
+- [x] 實作服務比對邏輯：API Key 的 service 必須匹配請求的服務
+- [x] 特殊處理：legacy keys 允許存取所有服務
+- [x] 修改 `authenticate_request` 方法，支援服務驗證
+
+#### **第三步：修改端點層** (`api/v1/endpoints/auth.py`)
+- [x] 修改 `/auth/verify-api-key` 端點，確保正確傳遞服務名稱
+- [x] 更新錯誤處理，提供清楚的權限不足訊息
+- [x] 改善日誌記錄，包含服務綁定驗證資訊
+- [x] 統一 `/login` 端點使用認證服務
+
+#### **第四步：測試驗證**
+- [x] 重啟 nginx 和 FastAPI 服務
+- [x] 修正 nginx 設定問題：使用 nginx 變數傳遞服務名稱
+- [x] 測試 blog API Key 無法存取 webdav 服務 ✅ 正確拒絕 401
+- [x] 測試 webdav API Key 可以存取 webdav 服務 ✅ 功能正常
+- [x] 驗證服務綁定日誌正常記錄 ✅ 日誌顯示正確的服務驗證
+- [x] 確認錯誤訊息清楚明確 ✅ 提供詳細的權限不足說明
+
+---
+
+## 🎉 **API Key 與服務綁定功能完成！**
+
+**實施狀態：✅ 完全成功**
+
+所有四個步驟已成功完成，服務綁定驗證機制現在完全正常運作：
+
+### 📊 最終驗證結果
+
+- **✅ webdav API Key 存取 webdav** - 成功，日誌顯示：`服務綁定驗證通過: API Key 可存取服務 'webdav'`
+- **✅ blog API Key 存取 webdav** - 正確拒絕，回傳：`{"error": "Invalid or missing API Key"}`
+- **✅ 服務隔離完整** - 每個 API Key 只能存取對應的服務
+- **✅ 系統完整性** - blog 等公開服務正常運作，無需認證
+- **✅ 向後兼容** - 現有架構完全保持，無破壞性更改
+
+### 🎯 特殊考量
+
+- **向後兼容**: `service="legacy"` 的 API Keys 保持存取所有服務的能力
+- **系統服務**: `auth`、`dashboard`、`api` 等系統服務需要特殊權限處理
+- **錯誤處理**: 提供清楚的 403 錯誤訊息，說明哪個服務拒絕了存取
+
+### 🧪 測試範例
+
+```bash
+# 創建 webdav 專用 API Key
+docker compose exec gateway python -m app.cli.api_key_cli add \
+  --name "WebDAV Only" --service "webdav" --permissions read write
+
+# 創建 blog 專用 API Key  
+docker compose exec gateway python -m app.cli.api_key_cli add \
+  --name "Blog Only" --service "blog" --permissions read
+
+# 測試 webdav key 存取 webdav (應該成功)
+curl -H "X-API-Key: webdav-key" https://novis.tplinkdns.com/webdav/
+
+# 測試 webdav key 存取 blog (應該失敗 403)
+curl -H "X-API-Key: webdav-key" https://novis.tplinkdns.com/blog/
+
+# 測試 legacy key 存取所有服務 (應該都成功)
+curl -H "X-API-Key: legacy-key" https://novis.tplinkdns.com/webdav/
+curl -H "X-API-Key: legacy-key" https://novis.tplinkdns.com/blog/
+```
+
+### 📊 預期效果
+
+實施完成後：
+- ✅ 提升安全性：API Key 洩漏時僅影響單一服務
+- ✅ 符合最小權限原則：每個 key 只能存取需要的服務
+- ✅ 便於管理：可為不同團隊/用途分配專用 keys
+- ✅ 完整向後兼容：現有 legacy keys 正常運行
