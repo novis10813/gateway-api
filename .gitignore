@@ -1,27 +1,46 @@
-# Python-generated files
+# 虛擬環境
+.venv/
+
+# Python
 __pycache__/
-*.py[oc]
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
 wheels/
-*.egg-info
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Virtual environments
-.venv
+# IDE
+.cursor/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 測試
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 敏感資料
 .env
-
 api_keys.json
-certbot/
+*.pem
+*.key
 
-# Fail2ban runtime data
-fail2ban/data/
-fail2ban/*.sqlite*
-fail2ban/*.log
-fail2ban/*.pid
-fail2ban/*.sock
-fail2ban/run/
-fail2ban/var/
-jail.d
-
-# Nginx logs (if storing locally)
-nginx/logs/
+# 系統檔案
+.DS_Store
+Thumbs.db
