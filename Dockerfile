@@ -11,6 +11,9 @@ RUN uv sync --frozen
 # Copy application code
 COPY app ./app
 
+# Set PYTHONPATH so imports from app/ work correctly
+ENV PYTHONPATH=/workspace/app
+
 # Expose the API port
 EXPOSE 8000
 
