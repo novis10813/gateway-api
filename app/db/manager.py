@@ -165,8 +165,14 @@ class ApiKeyDB:
                 if info.get("is_active", True)]
 
 
-# 全局實例
-api_key_db = ApiKeyDB()
+# 全局實例 - 使用 config 中的設定
+from core.config import settings
+import os
+
+# 使用當前檔案的目錄來確定絕對路徑
+_current_dir = Path(__file__).parent.parent  # app/ 目錄
+_db_path = _current_dir / settings.api_key_db_file
+api_key_db = ApiKeyDB(str(_db_path))
 
 
 def migrate_from_config(config_keys: List[str]):
