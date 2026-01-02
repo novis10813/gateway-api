@@ -21,6 +21,18 @@ class Settings(BaseSettings):
     api_key_db_file: str = "api_keys.json"
     use_legacy_api_keys: bool = False  # 是否同時支援舊的配置方式
     
+    # PostgreSQL 資料庫配置
+    database_url: str = "postgresql+asyncpg://gateway:gateway@localhost:5432/gateway_db"
+    testing: bool = False
+    
+    # Rate Limit 配置
+    rate_limit_requests_per_minute: int = 60
+    rate_limit_window_seconds: int = 60
+    
+    # 快取配置
+    cache_max_size: int = 1000
+    cache_ttl_seconds: int = 300  # 5 分鐘
+    
     # 服務配置
     debug: bool = False
     host: str = "0.0.0.0" 
