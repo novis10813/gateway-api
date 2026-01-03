@@ -2,6 +2,7 @@
 API dependencies for gateway authentication service.
 
 Contains dependency injection functions for authentication and authorization.
+Uses V2 async PostgreSQL-based auth service.
 """
 from fastapi import Depends, HTTPException, status, Request, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -9,7 +10,7 @@ from typing import Dict, Optional
 import ipaddress
 import logging
 
-from services.auth_service import auth_service
+from services.auth_service_v2 import auth_service_v2
 from models.auth import TokenData
 
 logger = logging.getLogger(__name__)
@@ -47,12 +48,13 @@ def require_internal_access(request: Request):
         )
 
 
-def verify_api_key(
+async def verify_api_key(
+    request: Request,
     x_api_key: str = Header(None, alias="X-API-Key"), 
     x_service_name: Optional[str] = Header(None, alias="X-Service-Name"),
     required_permission: str = None
 ) -> bool:
-    """驗證 API Key 依賴注入函數，支援服務綁定驗證"""
+    """驗證 API Key 依賴注入函數，支援服務綁定驗證 (V2 async PostgreSQL)"""
     logger.info(f"deps.verify_api_key 調用")
     logger.info(f"x_api_key 存在: {'是' if x_api_key else '否'}")
     logger.info(f"x_service_name: {x_service_name}")
@@ -62,28 +64,35 @@ def verify_api_key(
         logger.info("x_api_key 不存在")
 
     try:
-        result = auth_service.verify_api_key(x_api_key, required_permission, x_service_name)
+        client_ip = request.client.host if request.client else None
+        result = await auth_service_v2.verify_api_key(
+            x_api_key, required_permission, x_service_name, client_ip
+        )
         logger.info(f"verify_api_key 返回結果: {result}")
         return True
     except Exception as e:
-        logger.error(f"auth_service.verify_api_key 調用失敗: {e}")
+        logger.error(f"auth_service_v2.verify_api_key 調用失敗: {e}")
         raise
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> TokenData:
     """驗證 JWT token 依賴注入函數"""
-    return auth_service.verify_jwt_token(credentials.credentials)
+    return auth_service_v2.verify_jwt_token(credentials.credentials)
 
 
-def require_api_key_or_jwt(
+async def require_api_key_or_jwt(
+    request: Request,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     x_service_name: Optional[str] = Header(None, alias="X-Service-Name"),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
     required_permission: str = None
 ) -> Dict:
-    """要求 API Key 或 JWT token 其中之一的依賴注入函數，支援服務綁定驗證"""
+    """要求 API Key 或 JWT token 其中之一的依賴注入函數，支援服務綁定驗證 (V2 async)"""
     jwt_token = credentials.credentials if credentials else None
-    return auth_service.authenticate_request(x_api_key, jwt_token, required_permission, x_service_name)
+    client_ip = request.client.host if request.client else None
+    return await auth_service_v2.authenticate_request(
+        x_api_key, jwt_token, required_permission, x_service_name, client_ip
+    )
 
 
 # 重新導出認證依賴，便於其他模組使用
@@ -96,4 +105,4 @@ __all__ = [
     "TokenData",
     "security",
     "optional_security"
-] 
+]

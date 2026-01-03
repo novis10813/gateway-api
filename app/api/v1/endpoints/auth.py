@@ -2,6 +2,7 @@
 Authentication endpoints for gateway authentication service.
 
 Contains all authentication-related API endpoints.
+Uses V2 async PostgreSQL-based auth service.
 """
 import logging
 from datetime import timedelta
@@ -15,7 +16,7 @@ from api.deps import (
     verify_token, 
     require_api_key_or_jwt
 )
-from services.auth_service import auth_service
+from services.auth_service_v2 import auth_service_v2
 
 # 設置 logger
 logger = logging.getLogger(__name__)
@@ -24,12 +25,13 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=Token)
-async def login_with_api_key(login_request: LoginRequest):
+async def login_with_api_key(request: Request, login_request: LoginRequest):
     """使用 API Key 登入並取得 JWT token"""
     
     # 使用認證服務驗證 API Key（不進行服務綁定驗證，因為這是登入端點）
     try:
-        result = auth_service.verify_api_key(login_request.api_key)
+        client_ip = request.client.host if request.client else None
+        result = await auth_service_v2.verify_api_key(login_request.api_key, client_ip=client_ip)
         logger.info(f"登入驗證通過: {result['name']} (service: {result['service']})")
     except HTTPException as e:
         logger.warning(f"登入驗證失敗: {e.detail}")
@@ -40,7 +42,7 @@ async def login_with_api_key(login_request: LoginRequest):
     
     # 創建 JWT token
     access_token_expires = timedelta(minutes=settings.jwt_access_token_expire_minutes)
-    access_token = auth_service.create_access_token(
+    access_token = auth_service_v2.create_access_token(
         data={
             "sub": login_request.username,
             "scopes": login_request.scopes or []
@@ -124,4 +126,4 @@ async def verify_jwt_only(token_data: TokenData = Depends(verify_token)):
         message="Valid JWT token",
         user=token_data.username,
         scopes=token_data.scopes
-    ) 
+    )
