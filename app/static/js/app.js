@@ -118,7 +118,18 @@ async function loadApiKeys() {
         if (!response.ok) throw new Error('Failed to load API keys');
 
         const data = await response.json();
-        apiKeys = data.api_keys || [];
+        // API returns { keys: { "key_prefix": {...}, ... } }
+        // Convert to array format with key_prefix added
+        if (data.keys && typeof data.keys === 'object') {
+            apiKeys = Object.entries(data.keys).map(([keyPrefix, keyData]) => ({
+                ...keyData,
+                key_prefix: keyPrefix
+            }));
+        } else if (Array.isArray(data.api_keys)) {
+            apiKeys = data.api_keys;
+        } else {
+            apiKeys = [];
+        }
         renderApiKeys();
     } catch (error) {
         console.error('Error loading API keys:', error);
